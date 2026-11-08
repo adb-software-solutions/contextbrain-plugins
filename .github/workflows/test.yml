@@ -1,0 +1,33 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Manifests are valid JSON
+        run: |
+          for f in .claude-plugin/marketplace.json .agents/plugins/marketplace.json \
+                   plugins/contextbrain/plugin.json plugins/contextbrain/.claude-plugin/plugin.json \
+                   plugins/contextbrain/.mcp.json plugins/contextbrain/mcp.json \
+                   plugins/contextbrain/hooks/hooks.json; do
+            python -m json.tool "$f" > /dev/null || exit 1
+          done
+      - name: Versions match
+        run: |
+          a=$(python -c 'import json;print(json.load(open("plugins/contextbrain/plugin.json"))["version"])')
+          b=$(python -c 'import json;print(json.load(open("plugins/contextbrain/.claude-plugin/plugin.json"))["version"])')
+          test "$a" = "$b"
+      - name: Hook tests
+        run: python -m unittest discover tests

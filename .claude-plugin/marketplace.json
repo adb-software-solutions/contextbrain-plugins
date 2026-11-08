@@ -1,0 +1,17 @@
+{
+    "name": "contextbrain",
+    "description": "ContextBrain: shared project memory for you and your AI agents.",
+    "owner": {
+        "name": "ADB Software Solutions",
+        "url": "https://context-brain.com"
+    },
+    "plugins": [
+        {
+            "name": "contextbrain",
+            "source": "./plugins/contextbrain",
+            "description": "Connects ContextBrain and makes sessions load project context at the start and save it after substantial work.",
+            "homepage": "https://context-brain.com",
+            "category": "productivity"
+        }
+    ]
+}

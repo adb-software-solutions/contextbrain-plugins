@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "contextbrain": {
+            "type": "http",
+            "url": "${CONTEXTBRAIN_MCP_URL:-https://context-brain.com/mcp}"
+        }
+    }
+}

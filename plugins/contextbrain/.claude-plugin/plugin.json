@@ -1,0 +1,14 @@
+{
+    "name": "contextbrain",
+    "description": "Connects ContextBrain (shared project memory in your own Git repository) and makes sessions load project context at the start and save it after substantial work.",
+    "version": "0.1.0",
+    "author": {
+        "name": "ADB Software Solutions",
+        "url": "https://context-brain.com"
+    },
+    "homepage": "https://context-brain.com",
+    "repository": "https://github.com/adb-software-solutions/contextbrain-plugins",
+    "license": "MIT",
+    "privacyPolicyUrl": "https://context-brain.com/privacy",
+    "icon": "./.claude-plugin/icon.png"
+}

@@ -1,0 +1,24 @@
+{
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "name": "contextbrain",
+    "version": "0.1.0",
+    "description": "Connects ContextBrain (shared project memory in your own Git repository) and makes sessions load project context at the start and save it after substantial work.",
+    "author": {"name": "ADB Software Solutions"},
+    "homepage": "https://context-brain.com",
+    "repository": "https://github.com/adb-software-solutions/contextbrain-plugins",
+    "license": "MIT",
+    "extensions": {
+        "com.openai": {
+            "hooks": "./hooks/hooks.json",
+            "interface": {
+                "displayName": "ContextBrain",
+                "shortDescription": "Shared project memory for you and your AI agents.",
+                "developerName": "ADB Software Solutions",
+                "websiteURL": "https://context-brain.com",
+                "category": "Productivity",
+                "capabilities": ["Read", "Write"],
+                "defaultPrompt": ["Resume this project from ContextBrain."]
+            }
+        }
+    }
+}
