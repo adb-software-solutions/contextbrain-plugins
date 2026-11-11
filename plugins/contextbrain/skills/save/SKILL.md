@@ -10,8 +10,9 @@ description: Save this session to ContextBrain. Use when the user asks to save, 
     - summary: concise markdown covering what was done and why, what was
       verified, and anything a fresh session would need. No transcript, no
       restating the obvious; aim for under 300 words.
-    - current_state: where the project stands now (replaces the old one).
-    - next_steps: the remaining work, most important first.
+    - current_state: where your work stands now. It goes on your own page in
+      the project, so it never replaces a teammate's.
+    - next_steps: your remaining work, most important first (your page too).
     - decisions: only real decisions with lasting effect, each with its
       context and consequences.
     - gotchas: traps that cost time and would again (new ones only).

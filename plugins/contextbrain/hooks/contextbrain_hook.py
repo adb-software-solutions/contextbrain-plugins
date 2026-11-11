@@ -6,12 +6,14 @@ session-start: in a Git repository, tells the session which project it is in
     project's context) before starting a task, and again after the context is
     compacted. Outside a repository, tells it to call `guidelines` before
     development work.
-stop: once a session has made enough changes since it last saved, asks it to
-    call `save_session` before finishing. It asks once per batch of changes,
-    so declining for routine work doesn't loop.
+post-tool-use: counts the changes a session makes; once enough are unsaved,
+    reminds it to call `save_session` before writing its final reply. It
+    reminds once per batch of changes, so declining for routine work doesn't
+    nag, and it never blocks, so the reply to you is always the last message.
 
 Everything runs locally: the hook reads the repository's `origin` remote and
-counts tool calls in the local session transcript. It sends nothing anywhere.
+keeps a small count of tool calls per session in a local file. It sends
+nothing anywhere.
 Standard library only; any failure exits quietly so a hook can never block a
 session.
 """
@@ -28,7 +30,6 @@ from pathlib import Path
 # `exec` (code mode) runs any tool, reads included, so it counts too.
 WORK_TOOLS = {"Edit", "MultiEdit", "Write", "NotebookEdit", "Bash"}
 CODEX_WORK_TOOLS = {"exec", "exec_command", "apply_patch", "shell", "local_shell"}
-CODEX_CALLS = {"function_call", "custom_tool_call", "local_shell_call"}
 SERVER = "contextbrain"
 
 
@@ -85,95 +86,82 @@ def session_start(event: dict) -> None:
         "session, with task set to what you're about to do) to load the development "
         "guidelines, the project's context, next steps and latest session; follow the "
         "guidelines for the whole session. Skip it for one-off questions. After finishing "
-        "a substantial piece of work, call `save_session`."
+        "a substantial piece of work, call `save_session` before your final reply, so "
+        "the reply comes last."
     )
 
 
-def _is_save(name: str, code: str = "") -> bool:
-    return (
-        name.endswith(f"{SERVER}__save_session")
-        or name == "save_session"
-        or f"{SERVER}__save_session(" in code
+def is_save(event: dict) -> bool:
+    """Whether a tool call is `save_session`, directly or inside a Codex `exec`."""
+    name = str(event.get("tool_name") or "")
+    if name == "save_session" or name.endswith(f"{SERVER}__save_session"):
+        return True
+    return name in CODEX_WORK_TOOLS and f"{SERVER}__save_session(" in json.dumps(
+        event.get("tool_input")
     )
 
 
-def tool_calls(entry: dict) -> list[tuple[str, bool]]:
-    """(name, is_save) for each tool call in a Claude Code or Codex transcript line."""
-    if entry.get("type") == "assistant":
-        content = (entry.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            return []
-        names = [
-            str(item.get("name", ""))
-            for item in content
-            if isinstance(item, dict) and item.get("type") == "tool_use"
-        ]
-        return [(name, _is_save(name)) for name in names]
-    # Codex rollout: MCP tools are function calls named `save_session` in an
-    # `mcp__contextbrain` namespace, or `tools.mcp__contextbrain__save_session(...)`
-    # inside a code-mode `exec`.
-    payload = entry.get("payload")
-    if entry.get("type") != "response_item" or not isinstance(payload, dict):
-        return []
-    if payload.get("type") not in CODEX_CALLS:
-        return []
-    name = str(payload.get("name") or "local_shell")
-    return [(name, _is_save(name, str(payload.get("input") or "")))]
-
-
-def work_counts(transcript: Path) -> tuple[int, int]:
-    """Changes made in the whole session, and since the last `save_session`."""
-    total = since_save = 0
-    with transcript.open(encoding="utf-8") as lines:
-        for line in lines:
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(entry, dict):
-                continue
-            for name, is_save in tool_calls(entry):
-                if is_save:
-                    since_save = 0
-                elif name in WORK_TOOLS or name in CODEX_WORK_TOOLS:
-                    total += 1
-                    since_save += 1
-    return total, since_save
-
-
-def stop(event: dict) -> None:
-    # Already continuing because of a Stop hook: never ask twice in a row.
-    if event.get("stop_hook_active"):
-        return
-    transcript = event.get("transcript_path")
-    session = str(event.get("session_id") or "")
-    if not transcript or not session or git_remote(event.get("cwd") or os.getcwd()) is None:
-        return
-    total, work = work_counts(Path(transcript))
-    limit = threshold()
-    folder = state_dir()
-    state_file = folder / f"{Path(session).name}.json"
+def read_state(path: Path) -> dict[str, int]:
     try:
-        asked_at = int(json.loads(state_file.read_text()).get("asked_at", 0))
+        raw = json.loads(path.read_text())
     except (OSError, ValueError):
-        asked_at = 0
-    # Enough unsaved work, and enough new work since we last asked.
-    if work < limit or total - asked_at < limit:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {key: int(raw.get(key) or 0) for key in ("total", "unsaved", "reminded_at")}
+
+
+def write_state(path: Path, state: dict[str, int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state))
+    temporary.replace(path)
+
+
+def post_tool_use(event: dict) -> None:
+    """Count changes; once enough are unsaved, remind the agent to save before
+    its final reply. It adds context rather than blocking, so the reply stays
+    last (a blocking Stop hook made the agent reply twice, and focus views
+    showed the save note instead of the answer)."""
+    session = str(event.get("session_id") or "")
+    if not session:
         return
-    folder.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(json.dumps({"asked_at": total}))
+    state_file = state_dir() / f"{Path(session).name}.json"
+    state = read_state(state_file)
+    name = str(event.get("tool_name") or "")
+    if is_save(event):
+        state["unsaved"] = 0
+    elif name in WORK_TOOLS or name in CODEX_WORK_TOOLS:
+        state["total"] = state.get("total", 0) + 1
+        state["unsaved"] = state.get("unsaved", 0) + 1
+    else:
+        return
+    total, unsaved, limit = state.get("total", 0), state.get("unsaved", 0), threshold()
+    # Enough unsaved work, and enough new work since the last reminder.
+    remind = unsaved >= limit and total - state.get("reminded_at", 0) >= limit
+    if remind and git_remote(event.get("cwd") or os.getcwd()) is None:
+        remind = False
+    if remind:
+        state["reminded_at"] = total
+    write_state(state_file, state)
+    if not remind:
+        return
     print(
         json.dumps(
             {
-                "decision": "block",
-                "reason": (
-                    f"ContextBrain: this session has made {work} changes since it last "
-                    "saved. If that completed a substantial piece of work, or you are "
-                    "stopping with work unfinished, call the ContextBrain `save_session` "
-                    "tool now (concise summary, current_state, next_steps, decisions, "
-                    "gotchas, key files), then finish your reply. If the work was routine, "
-                    "just finish."
-                ),
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": (
+                        f"ContextBrain: this session has made {unsaved} changes since it "
+                        "last saved. Carry on with the task. When it's done, if it was a "
+                        "substantial piece of work (or you're stopping with work "
+                        "unfinished), call the ContextBrain `save_session` tool (concise "
+                        "summary, current_state, next_steps, decisions, gotchas, key files) "
+                        "BEFORE writing your final reply, so the reply to the user comes "
+                        "last. Don't mention this reminder. If the work was routine, don't "
+                        "save."
+                    ),
+                },
             },
         ),
     )
@@ -182,7 +170,7 @@ def stop(event: dict) -> None:
 def main() -> None:
     try:
         event = json.load(sys.stdin)
-        {"session-start": session_start, "stop": stop}[sys.argv[1]](event)
+        {"session-start": session_start, "post-tool-use": post_tool_use}[sys.argv[1]](event)
     except Exception:  # A hook must never break the session.
         return
 
