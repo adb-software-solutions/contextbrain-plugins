@@ -1,7 +1,7 @@
 {
     "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     "name": "contextbrain",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Connects ContextBrain (shared project memory in your own Git repository) and makes sessions load project context at the start and save it after substantial work.",
     "author": {"name": "ADB Software Solutions"},
     "homepage": "https://context-brain.com",

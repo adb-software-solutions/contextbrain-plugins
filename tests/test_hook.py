@@ -34,19 +34,6 @@ def repo(path: Path) -> Path:
     return path
 
 
-def claude_edit() -> dict:
-    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Edit"}]}}
-
-
-def claude_save() -> dict:
-    name = "mcp__plugin_contextbrain_contextbrain__save_session"
-    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name}]}}
-
-
-def codex_call(name: str, code: str = "") -> dict:
-    return {"type": "response_item", "payload": {"type": "function_call", "name": name, "input": code}}
-
-
 class SessionStart(unittest.TestCase):
     def test_in_a_repository_it_asks_for_resume_with_the_remote(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -71,7 +58,7 @@ class SessionStart(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
 
 
-class Stop(unittest.TestCase):
+class PostToolUse(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -81,33 +68,59 @@ class Stop(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def stop(self, entries: list[dict], **extra: object) -> str:
-        transcript = self.root / "t.jsonl"
-        transcript.write_text("\n".join(json.dumps(e) for e in entries))
-        event = {"cwd": str(self.cwd), "session_id": "s1", "transcript_path": str(transcript), **extra}
-        return run("stop", event, self.env)
+    def call(self, name: str, tool_input: object = None, cwd: Path | None = None) -> str:
+        event = {
+            "cwd": str(cwd or self.cwd),
+            "session_id": "s1",
+            "hook_event_name": "PostToolUse",
+            "tool_name": name,
+            "tool_input": tool_input or {},
+        }
+        return run("post-tool-use", event, self.env)
 
-    def test_asks_to_save_after_enough_work_then_waits_for_more(self) -> None:
-        self.assertEqual(self.stop([claude_edit()] * 2), "")
-        asked = json.loads(self.stop([claude_edit()] * 3))
-        self.assertEqual(asked["decision"], "block")
-        self.assertIn("save_session", asked["reason"])
-        self.assertEqual(self.stop([claude_edit()] * 4), "")
-        self.assertNotEqual(self.stop([claude_edit()] * 6), "")
+    def reminder(self, out: str) -> str:
+        data = json.loads(out)
+        self.assertNotIn("decision", data)  # Never blocks.
+        self.assertEqual(data["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+        return data["hookSpecificOutput"]["additionalContext"]
+
+    def test_reminds_once_per_batch_before_the_final_reply(self) -> None:
+        outs = [self.call("Edit") for _ in range(5)]
+        self.assertEqual(outs[:2], ["", ""])
+        self.assertIn("BEFORE writing your final reply", self.reminder(outs[2]))
+        self.assertEqual(outs[3:], ["", ""])
+        self.assertIn("6 changes", self.reminder(self.call("Bash")))
+
+    def test_reads_dont_count(self) -> None:
+        for _ in range(5):
+            self.assertEqual(self.call("Read"), "")
+            self.assertEqual(self.call("mcp__plugin_contextbrain_contextbrain__search"), "")
 
     def test_saving_resets_the_count(self) -> None:
-        self.assertEqual(self.stop([claude_edit()] * 5 + [claude_save()]), "")
+        saves = [
+            ("mcp__plugin_contextbrain_contextbrain__save_session", None),
+            ("save_session", None),
+            ("exec", {"code": "await tools.mcp__contextbrain__save_session({})"}),
+        ]
+        for name, tool_input in saves:
+            self.call("apply_patch")
+            self.call("apply_patch")
+            self.call(name, tool_input)
+            self.assertEqual(self.call("Edit"), "")
+            self.assertEqual(self.call("Edit"), "")
+            self.assertIn("3 changes", self.reminder(self.call("Write")))
+            self.call(name, tool_input)
 
-    def test_codex_work_and_saves_count(self) -> None:
-        work = [codex_call("apply_patch")] * 3
-        self.assertNotEqual(self.stop(work), "")
-        self.tearDown()
-        self.setUp()
-        saved = work + [codex_call("exec", "await tools.mcp__contextbrain__save_session({})")]
-        self.assertEqual(self.stop(saved), "")
+    def test_outside_a_repository_it_never_reminds(self) -> None:
+        outside = self.root / "plain"
+        outside.mkdir()
+        self.assertEqual([self.call("Edit", cwd=outside) for _ in range(5)], [""] * 5)
 
-    def test_never_asks_twice_in_a_row(self) -> None:
-        self.assertEqual(self.stop([claude_edit()] * 5, stop_hook_active=True), "")
+    def test_bad_input_never_fails(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(HOOK), "post-tool-use"], input="not json", capture_output=True, text=True
+        )
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
 
 
 if __name__ == "__main__":

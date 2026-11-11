@@ -11,12 +11,12 @@
                 ]
             }
         ],
-        "Stop": [
+        "PostToolUse": [
             {
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contextbrain_hook.py\" stop",
+                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/contextbrain_hook.py\" post-tool-use",
                         "timeout": 10
                     }
                 ]

@@ -11,9 +11,10 @@ This plugin connects Claude Code or Codex to ContextBrain and adds:
 - **A session-start hook** that tells the agent which project it is in and to
   `resume` from ContextBrain before starting work, and again after the
   context is compacted.
-- **A stop hook** that, after a substantial amount of work, asks the agent to
-  `save_session` before it finishes. It asks once per batch of changes, so
-  routine work isn't interrupted.
+- **A save reminder** that, after a substantial amount of work, reminds the
+  agent to `save_session` before it writes its final reply. It reminds once
+  per batch of changes and never blocks, so routine work isn't interrupted
+  and the reply to you is always the last message.
 - **Skills**: `resume`, `save` and `doc`.
 
 You need a ContextBrain account with at least one Brain.
@@ -60,12 +61,13 @@ codex mcp add contextbrain --url https://context-brain.com/mcp
 | ----------------------------- | ------------------------------- | ------------------------------------------------------- |
 | `CONTEXTBRAIN_SAVE_THRESHOLD` | `25`                            | Changes (edits, writes, commands) before asking to save |
 | `CONTEXTBRAIN_MCP_URL`        | `https://context-brain.com/mcp` | Claude Code only: the MCP server to connect to          |
-| `CONTEXTBRAIN_STATE_DIR`      | the plugin's data folder        | Where the stop hook remembers when it last asked        |
+| `CONTEXTBRAIN_STATE_DIR`      | the plugin's data folder        | Where the hook keeps each session's change count        |
 
 ## Privacy
 
 The hooks run on your machine. They read the repository's `origin` remote and
-count tool calls in the local session transcript; they send nothing anywhere.
+keep a count of each session's tool calls in a local file; they send nothing
+anywhere.
 Only your agent talks to ContextBrain, through the MCP connection you
 authorise. See the [privacy policy](https://context-brain.com/privacy).
 
