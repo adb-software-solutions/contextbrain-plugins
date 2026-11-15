@@ -12,7 +12,10 @@ description: Save this session to ContextBrain. Use when the user asks to save, 
       restating the obvious; aim for under 300 words.
     - current_state: where your work stands now. It goes on your own page in
       the project, so it never replaces a teammate's.
-    - next_steps: your remaining work, most important first (your page too).
+    - page_sha: the sha of your page from resume's header, so current_state
+      replaces it only if no other session changed it since.
+    - next_steps: only new next steps, to add to your page's list (nothing is
+      removed). Tick off finished ones with replace_in_note.
     - decisions: only real decisions with lasting effect, each with its
       context and consequences.
     - gotchas: traps that cost time and would again (new ones only).
