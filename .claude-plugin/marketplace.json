@@ -9,7 +9,7 @@
         {
             "name": "contextbrain",
             "source": "./plugins/contextbrain",
-            "description": "Connects ContextBrain and makes sessions load project context at the start and save it after substantial work.",
+            "description": "Makes sessions load project context from ContextBrain at the start and save it after substantial work.",
             "homepage": "https://context-brain.com",
             "category": "productivity"
         }

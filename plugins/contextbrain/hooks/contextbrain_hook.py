@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -30,7 +31,15 @@ from pathlib import Path
 # `exec` (code mode) runs any tool, reads included, so it counts too.
 WORK_TOOLS = {"Edit", "MultiEdit", "Write", "NotebookEdit", "Bash"}
 CODEX_WORK_TOOLS = {"exec", "exec_command", "apply_patch", "shell", "local_shell"}
-SERVER = "contextbrain"
+# The plugin doesn't add an MCP server: each Brain has its own MCP URL, added
+# as `contextbrain` (Claude Code, per repository) or `contextbrain-<org>-<brain>`
+# (Codex), so a save is any ContextBrain server's save_session.
+SAVE = re.compile(r"contextbrain[\w-]*__save_session")
+CONNECT = (
+    " If no ContextBrain tools are available, this repository's Brain isn't "
+    "connected: tell the user once to add it from the Brains page on ContextBrain "
+    "(each Brain has its own MCP URL) and carry on without it."
+)
 
 
 def threshold() -> int:
@@ -67,8 +76,8 @@ def session_start(event: dict) -> None:
     remote = git_remote(event.get("cwd") or os.getcwd())
     if remote is None:
         print(
-            "ContextBrain is connected. Before doing development work here, call the "
-            "ContextBrain `guidelines` tool and follow the development guidelines it returns."
+            "Before doing development work here, call the ContextBrain `guidelines` tool "
+            "and follow the development guidelines it returns." + CONNECT
         )
         return
     if event.get("source") == "compact":
@@ -81,23 +90,23 @@ def session_start(event: dict) -> None:
         )
         return
     print(
-        f"ContextBrain is connected and this repo is {remote}. Before starting a task in "
+        f"This repo is {remote}. Before starting a task in "
         f"this repo, call the ContextBrain `resume` tool with remote_url={remote} (once per "
         "session, with task set to what you're about to do) to load the development "
         "guidelines, the project's context, next steps and latest session; follow the "
         "guidelines for the whole session. Skip it for one-off questions. After finishing "
         "a substantial piece of work, call `save_session` before your final reply, so "
-        "the reply comes last."
+        "the reply comes last." + CONNECT
     )
 
 
 def is_save(event: dict) -> bool:
     """Whether a tool call is `save_session`, directly or inside a Codex `exec`."""
     name = str(event.get("tool_name") or "")
-    if name == "save_session" or name.endswith(f"{SERVER}__save_session"):
+    if name == "save_session" or (SAVE.search(name) and name.endswith("__save_session")):
         return True
-    return name in CODEX_WORK_TOOLS and f"{SERVER}__save_session(" in json.dumps(
-        event.get("tool_input")
+    return name in CODEX_WORK_TOOLS and bool(
+        re.search(SAVE.pattern + r"\(", json.dumps(event.get("tool_input")))
     )
 
 

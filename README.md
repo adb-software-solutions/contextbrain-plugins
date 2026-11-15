@@ -4,10 +4,9 @@
 your AI agents: project context, decisions, runbooks and session notes, kept as
 Markdown in a Git repository you own.
 
-This plugin connects Claude Code or Codex to ContextBrain and adds:
+This plugin makes Claude Code or Codex use ContextBrain without being asked.
+It adds:
 
-- **The ContextBrain MCP server**, so your agent can search, read and save
-  knowledge in the Brains you've authorised.
 - **A session-start hook** that tells the agent which project it is in and to
   `resume` from ContextBrain before starting work, and again after the
   context is compacted.
@@ -19,6 +18,33 @@ This plugin connects Claude Code or Codex to ContextBrain and adds:
 
 You need a ContextBrain account with at least one Brain.
 [Start a trial](https://context-brain.com/pricing).
+
+## Connect your Brains
+
+The plugin doesn't connect ContextBrain itself. Each Brain has its own MCP
+URL, `https://context-brain.com/mcp/<organisation>/<brain>`, and a
+connection there can only ever reach that Brain, so work for one
+organisation can't end up in another's. The **Brains** page on ContextBrain
+shows the exact commands for each of yours.
+
+With one Brain, connect it once for every repository:
+
+```sh
+claude mcp add --transport http --scope user contextbrain https://context-brain.com/mcp/<organisation>/<brain>
+codex mcp add contextbrain --url https://context-brain.com/mcp/<organisation>/<brain>
+```
+
+With several, connect the right one in each repository. In Claude Code,
+`--scope project` writes `.mcp.json`; commit it so your team gets the same
+Brain there. In Codex, give each Brain its own name:
+
+```sh
+claude mcp add --transport http --scope project contextbrain https://context-brain.com/mcp/<organisation>/<brain>
+codex mcp add contextbrain-<organisation>-<brain> --url https://context-brain.com/mcp/<organisation>/<brain>
+```
+
+Your agent asks you to sign in the first time it uses a Brain. In Claude
+Code, you can also run `/mcp` and choose **contextbrain**.
 
 ## Claude Code
 
@@ -34,9 +60,6 @@ Or inside Claude Code:
 /plugin install contextbrain@contextbrain
 ```
 
-Then run `/mcp`, choose **contextbrain** and sign in. You'll choose which
-Brains the connection can use.
-
 ## Codex
 
 ```sh
@@ -44,24 +67,20 @@ codex plugin marketplace add adb-software-solutions/contextbrain-plugins
 codex plugin add contextbrain@contextbrain
 ```
 
-Codex asks you to sign in to ContextBrain when the plugin is installed.
+Then trust the plugin's hooks with `/hooks`; installing a plugin doesn't
+trust them.
 
 ## Without the plugin
 
-The MCP server works on its own if you'd rather not install hooks:
-
-```sh
-claude mcp add --transport http contextbrain https://context-brain.com/mcp
-codex mcp add contextbrain --url https://context-brain.com/mcp
-```
+The MCP connection works on its own if you'd rather not install hooks; your
+agent just won't be reminded to resume and save.
 
 ## Settings
 
-| Variable                      | Default                         | What it does                                            |
-| ----------------------------- | ------------------------------- | ------------------------------------------------------- |
-| `CONTEXTBRAIN_SAVE_THRESHOLD` | `25`                            | Changes (edits, writes, commands) before asking to save |
-| `CONTEXTBRAIN_MCP_URL`        | `https://context-brain.com/mcp` | Claude Code only: the MCP server to connect to          |
-| `CONTEXTBRAIN_STATE_DIR`      | the plugin's data folder        | Where the hook keeps each session's change count        |
+| Variable                      | Default                  | What it does                                            |
+| ----------------------------- | ------------------------ | ------------------------------------------------------- |
+| `CONTEXTBRAIN_SAVE_THRESHOLD` | `25`                     | Changes (edits, writes, commands) before asking to save |
+| `CONTEXTBRAIN_STATE_DIR`      | the plugin's data folder | Where the hook keeps each session's change count        |
 
 ## Privacy
 
