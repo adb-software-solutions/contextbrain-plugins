@@ -40,6 +40,9 @@ class SessionStart(unittest.TestCase):
             out = run("session-start", {"cwd": str(repo(Path(tmp)))})
         self.assertIn("`resume`", out)
         self.assertIn("remote_url=https://example.com/acme/app.git", out)
+        # The plugin doesn't connect a Brain, so it never claims one is connected.
+        self.assertNotIn("is connected", out)
+        self.assertIn("Brains page", out)
 
     def test_after_compaction_it_asks_again(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -101,6 +104,9 @@ class PostToolUse(unittest.TestCase):
             ("mcp__plugin_contextbrain_contextbrain__save_session", None),
             ("save_session", None),
             ("exec", {"code": "await tools.mcp__contextbrain__save_session({})"}),
+            ("mcp__contextbrain__save_session", None),
+            ("mcp__contextbrain-acme-work__save_session", None),
+            ("exec", {"code": "await tools.mcp__contextbrain_acme_work__save_session({})"}),
         ]
         for name, tool_input in saves:
             self.call("apply_patch")
